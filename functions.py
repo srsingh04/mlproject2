@@ -58,3 +58,37 @@ def plot_data_over_interval(x, y, interval, x_label, y_label):
     # plt.legend()
     plt.grid()
     plt.show()
+
+#speed variability
+def calculate_speed_variability(data, interval):
+    """
+    Calculate speed variability over specified intervals.
+
+    Args:
+    data (pd.DataFrame): DataFrame containing at least the 'euclidean_speed' column.
+    interval (int): Number of rows (frames) per interval.
+
+    Returns:
+    pd.DataFrame: DataFrame with new columns:
+                  - 'std_speed': Standard deviation of speed in each interval
+                  - 'mean_speed': Mean speed in each interval
+                  - 'speed_variability': Ratio of std to mean in each interval
+    """
+    # Validate input
+    if 'euclidean_speed' not in data.columns:
+        raise ValueError("The DataFrame must contain a column named 'euclidean_speed'.")
+
+    # Calculate rolling statistics based on intervals
+    rolling_std = data['euclidean_speed'].rolling(window=interval, min_periods=1).std()
+    rolling_mean = data['euclidean_speed'].rolling(window=interval, min_periods=1).mean()
+
+    # Assign computed values to new columns
+    data['std_speed'] = rolling_std
+    data['mean_speed'] = rolling_mean
+    data['speed_variability'] = data['std_speed'] / data['mean_speed']
+
+    # Propagate interval values to all rows within the interval
+    for col in ['std_speed', 'mean_speed', 'speed_variability']:
+        data[col] = data[col].shift(-interval + 1).fillna(method='bfill')
+        
+    return data
