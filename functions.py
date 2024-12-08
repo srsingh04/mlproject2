@@ -60,7 +60,7 @@ def plot_data_over_interval(x, y, interval, x_label, y_label):
     plt.show()
 
 #speed variability
-def calculate_speed_variability(data, interval):
+def calculate_speed_variability(data, interval, threshold_speed):
     """
     Calculate speed variability over specified intervals.
 
@@ -78,6 +78,7 @@ def calculate_speed_variability(data, interval):
     if 'euclidean_speed' not in data.columns:
         raise ValueError("The DataFrame must contain a column named 'euclidean_speed'.")
 
+    data['RoamingIndic'] = (data['euclidean_speed'] > threshold_speed).astype(int)
     # Calculate rolling statistics based on intervals
     rolling_std = data['euclidean_speed'].rolling(window=interval, min_periods=1).std()
     rolling_mean = data['euclidean_speed'].rolling(window=interval, min_periods=1).mean()
@@ -86,6 +87,8 @@ def calculate_speed_variability(data, interval):
     data['std_speed'] = rolling_std
     data['mean_speed'] = rolling_mean
     data['speed_variability'] = data['std_speed'] / data['mean_speed']
+
+    data['roaming_frac'] = data['RoamingIndic'].rolling(window=interval, min_periods=1).mean()
 
     # Propagate interval values to all rows within the interval
     for col in ['std_speed', 'mean_speed', 'speed_variability']:
