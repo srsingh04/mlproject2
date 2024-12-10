@@ -1,97 +1,120 @@
-import numpy as np
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 
-def calculate_time_units(frames):
-    """
-    Calculate elapsed time in seconds, minutes, hours, and days for each frame.
-
-    Args:
-    frames (array-like): Continuous frame numbers.
-
-    Returns:
-    pandas.DataFrame: A DataFrame with columns for seconds, minutes, hours, and days.
-
-    To run:
-    time_columns = calculate_time_units(data['continuous_frames'])
-    data = pd.concat([data, time_columns], axis=1)
-    """
-    frames = np.array(frames)  # Ensure input is a numpy array for vectorized computation
-    recording_period = 900  # Frames in a recording session (30 minutes)
-    recording_duration = 2 * recording_period  # Time in seconds for one session (30 minutes)
-    break_duration = 5.5 * 3600  # 5.5 hours in seconds
-
-    # Calculate elapsed time in seconds
-    elapsed_seconds = (
-        2 * (frames % recording_period) +  # Time within the current recording session
-        (frames // recording_period) * (recording_duration + break_duration)  # Time from skipped intervals
-    )
+def wormstats(csv_file_path):
+    data = pd.read_csv(csv_file_path)
     
-    # Convert to other units
-    elapsed_minutes = elapsed_seconds / 60
-    elapsed_hours = elapsed_minutes / 60
-    elapsed_days = elapsed_hours / 24
+    def calculate_mapped_values(data):
+        """
+        Adds a new column to the DataFrame that maps the nth row to the formula:
+        2 * n + floor((n - 1) / 900) * 5.5 * 3600.
+    
+        Args:
+            data (pd.DataFrame): The input DataFrame.
+    
+        Returns:
+            pd.DataFrame: Updated DataFrame with the new 'Mapped Value' column.
+        """
+        # Calculate row indices starting from 1
+        n = data.index + 1  # Row index (n), starting from 1
+        # Apply the formula (see iPad)
+        data['Time elapsed (in sec)'] = 2 * n + np.floor((n - 1) / 900) * 5.5 * 3600
+        data['Time elapsed (in hours)'] = data['Time elapsed (in sec)']/3600
+        return data
+    
+    
+    data['group'] = data.index.map(lambda x : np.floor((x)/900) )
+    data = calculate_mapped_values(data)
 
-    # Return as a DataFrame
-    return pd.DataFrame({
-        'time_seconds': elapsed_seconds,
-        'time_minutes': elapsed_minutes,
-        'time_hours': elapsed_hours,
-        'time_days': elapsed_days
-    })
+    # Calculate differences in X, Y, and time
+    data_dx = data['X'].diff()
+    data_dy = data['Y'].diff()
+    delta_time = data['Time elapsed (in sec)'].diff()
+    
+    distance = np.sqrt(data_dx**2 + data_dy**2)
+    data['dist'] = distance
+    # Calculate speed as distance divided by time
+    data['EucSpeed'] = distance / delta_time
 
+    condition = (data.index) % 900 == 0
+    data['Changed Pixels'] = data['Changed Pixels'].shift(1)
+    data.loc[condition, ['EucSpeed', 'Changed Pixels']] = None
 
-def plot_data_over_interval(x, y, interval, x_label, y_label):
-    """
-    Plot speed variability over time.
-
-    Args:
-    data (pd.DataFrame): DataFrame containing 'speed_variability' and 'time'.
-    interval (int): Interval used for calculations (used for graphing notes).
-    """
-    plt.figure(figsize=(10, 6))
-    # Plot speed variability against time
-    plt.plot(x, y, label=y_label, color='blue', linewidth=1.5)
-    plt.title(f"{y_label} Over Time (Interval = {interval} frames)")
-    plt.xlabel(x_label)
-    plt.ylabel(y_label)
-    # plt.legend()
-    plt.grid()
-    plt.show()
-
-#speed variability
-def calculate_speed_variability(data, interval, threshold_speed):
-    """
-    Calculate speed variability over specified intervals.
-
-    Args:
-    data (pd.DataFrame): DataFrame containing at least the 'euclidean_speed' column.
-    interval (int): Number of rows (frames) per interval.
-
-    Returns:
-    pd.DataFrame: DataFrame with new columns:
-                  - 'std_speed': Standard deviation of speed in each interval
-                  - 'mean_speed': Mean speed in each interval
-                  - 'speed_variability': Ratio of std to mean in each interval
-    """
-    # Validate input
-    if 'euclidean_speed' not in data.columns:
-        raise ValueError("The DataFrame must contain a column named 'euclidean_speed'.")
-
-    data['RoamingIndic'] = (data['euclidean_speed'] > threshold_speed).astype(int)
-    # Calculate rolling statistics based on intervals
-    rolling_std = data['euclidean_speed'].rolling(window=interval, min_periods=1).std()
-    rolling_mean = data['euclidean_speed'].rolling(window=interval, min_periods=1).mean()
-
-    # Assign computed values to new columns
-    data['std_speed'] = rolling_std
-    data['mean_speed'] = rolling_mean
-    data['speed_variability'] = data['std_speed'] / data['mean_speed']
-
-    data['roaming_frac'] = data['RoamingIndic'].rolling(window=interval, min_periods=1).mean()
-
-    # Propagate interval values to all rows within the interval
-    for col in ['std_speed', 'mean_speed', 'speed_variability']:
-        data[col] = data[col].shift(-interval + 1).fillna(method='bfill')
+    def find_death_row(data, change_col='Changed Pixels', threshold=5, window=10, persistence=0.9):
+        """
+        Find the first row where the worm is considered "dead."
         
-    return data
+        Args:
+            data (pd.DataFrame): The worm's trajectory data.
+            change_col (str): Column indicating changes in pixels.
+            threshold (int): Threshold below which the worm is considered inactive.
+            window (int): Number of subsequent rows to check for inactivity.
+            persistence (float): Fraction of rows in the window that must satisfy the condition.
+        
+        Returns:
+            int: Index of the death row or -1 if no such row is found.
+        """
+        for i in range(len(data) - window):
+            # Check if the current row satisfies the condition
+            if data.loc[i, change_col] < threshold:
+                # Check the persistence condition in the window
+                subsequent = data[change_col].iloc[i:i+window]
+                if (subsequent < threshold).sum() >= persistence * window:
+                    return i
+        return -1  # Return -1 if no death row is found
+    
+    death_row = find_death_row(data, change_col='Changed Pixels', threshold=5, window=500, persistence=0.9)
+    final_age = data['Time elapsed (in hours)'].iloc[death_row]
+    
+    data = data.dropna(subset=['X', 'Y', 'EucSpeed'])
+
+    def add_derived_columns(data, speed_threshold=0.1):
+        """
+        Adds derived columns to the worm trajectory CSV.
+    
+        Args:
+            csv_file (str): Path to the input CSV file.
+            output_file (str): Path to save the updated CSV file (optional).
+            speed_threshold (float): Threshold for stationary flag.
+    
+        Returns:
+            pd.DataFrame: DataFrame with added columns.
+        """
+        # Add derived columns
+        data['Change in Speed'] = data['EucSpeed'].diff().abs().fillna(0)
+        data['Change in Pixels'] = data['Changed Pixels'].diff().fillna(0)
+        data['Instantaneous Distance'] = np.sqrt(
+            (data['X'].diff() ** 2) + (data['Y'].diff() ** 2)
+        ).fillna(0)
+        data['Total Distance'] = data['Instantaneous Distance'].cumsum()
+        data['Angle'] = np.arctan2(data['Y'].diff(), data['X'].diff()).fillna(0)
+        data['Angular Change'] = data['Angle'].diff().abs().fillna(0)
+        data['Stationary'] = (data['EucSpeed'] < speed_threshold).astype(int)
+        data['Cumulative Stationary Time'] = data['Stationary'].cumsum()
+    
+        return data
+    
+    #output_file = 'updated_worm_file.csv'  # Optional output file
+    data = add_derived_columns(data)
+    data.reset_index(inplace = True)
+
+    THEC = data.EucSpeed.mean()*1.2
+    w = 10
+    data['Roaming2'] = data['EucSpeed'].rolling(window=w, center=True).mean()
+    data['RoamingIndic'] = (data['Roaming2'] > THEC).astype(int)
+    #data['Roaming Fraction2'] = data['RoamingIndic'].rolling(window=10, center=True, min_periods=1).mean()
+
+    roaming_frac=data['RoamingIndic'].sum()*2
+    total_time = data.shape[0]*2
+
+    average_speed = data.EucSpeed.mean()
+    average_distance_per_frame = data['dist'].mean()
+    maximal_stpwsdistance_travalled = data['dist'].max()
+    maximal_distance_travalled = data['Total Distance'].max()
+    average_change_in_pixels = data['Change in Pixels'].mean()
+    average_angular_speed= data['Angular Change'].mean()
+    FRF = roaming_frac/total_time
+    final_age
+
+    return [average_speed, average_distance_per_frame, maximal_stpwsdistance_travalled ,  maximal_distance_travalled, average_change_in_pixels, average_angular_speed, FRF, final_age]
