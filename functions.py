@@ -115,6 +115,46 @@ def wormstats(csv_file_path):
     average_change_in_pixels = data['Change in Pixels'].mean()
     average_angular_speed= data['Angular Change'].mean()
     FRF = roaming_frac/total_time
-    final_age
-
-    return [average_speed, average_distance_per_frame, maximal_stpwsdistance_travalled ,  maximal_distance_travalled, average_change_in_pixels, average_angular_speed, FRF, final_age]
+    
+    grouped_speed = data.groupby('group').EucSpeed.mean()
+    grouped_distance = data.groupby('group').dist.mean()
+    grouped_max_distance = data.groupby('group')['Total Distance'].max()
+    grouped_avg_change_pixels = data.groupby('group')['Change in Pixels'].mean()
+    grouped_avg_change_speed = data.groupby('group')['Change in Speed'].mean()
+    grouped_avg_angular_speed = data.groupby('group')['Angular Change'].mean()
+    fg = data.groupby('group')['Time elapsed (in hours)'].apply(lambda x: x.iloc[-1])
+    stdd = data.groupby('group')['EucSpeed'].std()
+    y = data.groupby(['group']).RoamingIndic.mean()
+    
+    # Compute the difference between consecutive rows
+    difference = grouped_max_distance.diff()
+    
+    # Combine the original values and the differences into a DataFrame
+    result_df = pd.DataFrame({
+        'group': grouped_max_distance.index,
+        'max_distance': grouped_max_distance.values,
+        'difference': difference.values
+    })
+    
+    result_df.difference[0]=result_df.max_distance[0]
+    result_df.drop(columns = ['max_distance'])
+    result_df.set_index('group', inplace = True)
+    grouped_df = pd.concat(
+    {'average_speed': grouped_speed,
+        'average_distance_per_frame': grouped_distance,
+        'maximal_distance_traveled': grouped_max_distance,
+        'average_change_in_pixels': grouped_avg_change_pixels,
+        'average_angular_speed': grouped_avg_angular_speed,
+         'distance_travaled' : result_df,
+         'average_change_speed' : grouped_avg_change_speed,
+         'time_elapsed_(hours)' : fg,
+         'std_speed' : stdd,
+         'std/mean' : stdd/grouped_speed,
+         'roaming_fraction' : y
+        },
+        axis=1
+    ).reset_index()
+    grouped_df.columns = grouped_df.columns.get_level_values(0)
+    grouped_df['lifespan']=final_age
+    
+    return grouped_df
