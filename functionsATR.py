@@ -17,16 +17,9 @@ def calculate_time_units(frames):
     data = pd.concat([data, time_columns], axis=1)
     """
     frames = np.array(frames)  # Ensure input is a numpy array for vectorized computation
-    recording_period = 900  # Frames in a recording session (30 minutes)
-    recording_duration = 2 * recording_period  # Time in seconds for one session (30 minutes)
-    break_duration = 5.5 * 3600  # 5.5 hours in seconds
-
-    # Calculate elapsed time in seconds
-    elapsed_seconds = (
-        2 * (frames % recording_period) +  # Time within the current recording session
-        (frames // recording_period) * (recording_duration + break_duration)  # Time from skipped intervals
-    )
     
+    # Calculate elapsed time in seconds
+    elapsed_seconds = 2 * frames
     # Convert to other units
     elapsed_minutes = elapsed_seconds / 60
     elapsed_hours = elapsed_minutes / 60
@@ -56,15 +49,9 @@ def calculate_time_units_atr(frames):
     data = pd.concat([data, time_columns], axis=1)
     """
     frames = np.array(frames)  # Ensure input is a numpy array for vectorized computation
-   # recording_period = 900  # Frames in a recording session (30 minutes)
-    #recording_duration = 2 * recording_period  # Time in seconds for one session (30 minutes)
-   # break_duration = 5.5 * 3600  # 5.5 hours in seconds
 
     # Calculate elapsed time in seconds
-    elapsed_seconds = (
-        2 * frames  # Time within the current recording session
-        #(frames // recording_period) * (recording_duration + break_duration)  # Time from skipped intervals
-    )
+    elapsed_seconds = 2 * frames
     
     # Convert to other units
     elapsed_minutes = elapsed_seconds / 60
