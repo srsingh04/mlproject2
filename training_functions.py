@@ -1,6 +1,9 @@
 import pandas as pd
 import numpy as np
-
+from sklearn.model_selection import GroupKFold
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report
+from sklearn.impute import SimpleImputer
 
 def split_by_worm_id(df, test_size=0.2):
   """Splits a DataFrame based on 'worm_id' into training and testing sets.
@@ -64,3 +67,54 @@ def train_test_x_and_y(train_df, test_df):
 
   return X_train, y_train, X_test, y_test
 
+def rfc_group_kfold_validation(df, n_splits=5, random_state=42):
+    """
+    Perform GroupKFold cross-validation on the dataset based on worm_id.
+
+    Args:
+        df: DataFrame containing the dataset.
+        n_splits: Number of folds for cross-validation.
+
+    Returns:
+        None (prints mean accuracy and classification report).
+    """
+    # Extract features (X), target (y), and groups (worm_id)
+    X = df.drop(columns=['worm_id', 'drugged', 'average_distance_per_frame', 'maximal_distance_traveled', 'average_acceleration'])  # Drop 'worm_id' and target
+    y = df['drugged']  # Target variable
+    groups = df['worm_id']  # Group variable for GroupKFold
+    
+    # Initialize GroupKFold
+    gkf = GroupKFold(n_splits=n_splits)
+    
+    accuracies = []
+    for train_idx, test_idx in gkf.split(X, y, groups):
+        # Create train and test sets
+        X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+        y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+
+
+        # sample imputing (NEED TO IMPROVE) -- ONLY TEMPORARY
+        if np.isnan(X_train).any().any() or np.isnan(X_test).any().any():
+          # Impute missing values with the median
+          imputer = SimpleImputer(strategy='median')
+          X_train = imputer.fit_transform(X_train)
+          X_test = imputer.fit_transform(X_test)
+
+
+        # Initialize and train Random Forest Classifier
+        model = RandomForestClassifier(random_state=random_state)
+        model.fit(X_train, y_train)
+
+        # Predict and evaluate
+        y_pred = model.predict(X_test)
+        acc = accuracy_score(y_test, y_pred)
+        accuracies.append(acc)
+
+        # Optionally print classification report for each fold
+        print(classification_report(y_test, y_pred))
+
+    # Report overall results
+    print(f"Mean Accuracy: {np.mean(accuracies):.2f}")
+    print(f"Standard Deviation: {np.std(accuracies):.2f}")
+
+  
