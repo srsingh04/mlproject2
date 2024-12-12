@@ -24,6 +24,22 @@ def split_by_worm_id(df, test_size=0.2):
     train_df = df[~df['worm_id'].isin(test_worm_ids)]
     test_df = df[df['worm_id'].isin(test_worm_ids)]
 
+    #drop worm id
+    train_df = train_df.drop('worm_id', axis=1)
+    test_df = test_df.drop('worm_id', axis=1)
+    #drop distance
+    train_df = train_df.drop('average_distance_per_frame', axis=1)
+    test_df = test_df.drop('average_distance_per_frame', axis=1)
+    #drop maximal distance
+    train_df = train_df.drop('maximal_distance_traveled', axis=1)
+    test_df = test_df.drop('maximal_distance_traveled', axis=1)
+    #drop group
+    train_df = train_df.drop('group', axis=1)
+    test_df = test_df.drop('group', axis=1)
+    #drop acceleration
+    train_df = train_df.drop('average_acceleration', axis=1)
+    test_df = test_df.drop('average_acceleration', axis=1)
+
     # Check if all classes are present in both sets
     if len(train_df['drugged'].unique()) == 3 and len(test_df['drugged'].unique()) == 3:
       return train_df, test_df
