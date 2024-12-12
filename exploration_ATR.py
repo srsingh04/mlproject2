@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import argparse
-import functions
+import functionsATR
 
 
 threshold = 500
@@ -46,9 +46,9 @@ def data_preprocess(data):
     data['speed_diff'] = data['euclidean_speed'] - data['Speed']
     data['speed_diff'] = np.where(abs(data['speed_diff']) < 0.01, 0, data['speed_diff'])
 
-    time_columns = functions.calculate_time_units(data['continuous_frames'])
+    time_columns = functionsATR.calculate_time_units(data['continuous_frames'])
     data = pd.concat([data, time_columns], axis=1)
-    data = functions.calculate_speed_variability(data, interval=INTERVAL, threshold_speed=THEC)
+    data = functionsATR.calculate_speed_variability(data, interval=INTERVAL, threshold_speed=THEC)
     
     return data
 
