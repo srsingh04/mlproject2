@@ -2,8 +2,13 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import GroupKFold
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from xgboost import XGBClassifier
+from sklearn.preprocessing import StandardScaler
 
 def split_by_worm_id(df, test_size=0.2):
   """Splits a DataFrame based on 'worm_id' into training and testing sets.
@@ -67,7 +72,8 @@ def train_test_x_and_y(train_df, test_df):
 
   return X_train, y_train, X_test, y_test
 
-def rfc_group_kfold_validation(df, n_splits=5, random_state=42):
+  
+def group_kfold_validation(df, model_select="logistic", n_splits=5, random_state=42):
     """
     Perform GroupKFold cross-validation on the dataset based on worm_id.
 
@@ -100,9 +106,32 @@ def rfc_group_kfold_validation(df, n_splits=5, random_state=42):
           X_train = imputer.fit_transform(X_train)
           X_test = imputer.fit_transform(X_test)
 
-
         # Initialize and train Random Forest Classifier
-        model = RandomForestClassifier(random_state=random_state)
+        if model_select == "logistic":
+          model = LogisticRegression(random_state=random_state, penalty='l2', max_iter=1000, multi_class='multinomial', solver='saga', class_weight={0:0.5,1:0.25,2:0.25}) #
+        elif model_select == "random_forest":
+           model = RandomForestClassifier(random_state=random_state)
+        elif model_select == "decision_tree":
+           model = DecisionTreeClassifier(random_state=random_state)
+        elif model_select == "svm":
+           model = SVC(random_state=random_state, class_weight='balanced')
+        elif model_select == "xgboost":
+          model = XGBClassifier(random_state=random_state, use_label_encoder=False, eval_metric='mlogloss', n_estimators=100, learning_rate=0.05, gamma=0.001) #converges regardless of n_estimators, learning_rate and gamma
+        else:
+           raise Exception("Invalid model selected, options are logistic, random_forest, decision_tree")
+
+
+        #scale for linear models only
+        if model_select == "logistic" or model_select == "svm":
+            scaler_train = StandardScaler()
+            scaler_train.fit(X_train)
+            X_train = scaler_train.transform(X_train)
+
+            scaler_test = StandardScaler()
+            scaler_test.fit(X_test)
+            X_test = scaler_test.transform(X_test)
+
+
         model.fit(X_train, y_train)
 
         # Predict and evaluate
@@ -117,4 +146,4 @@ def rfc_group_kfold_validation(df, n_splits=5, random_state=42):
     print(f"Mean Accuracy: {np.mean(accuracies):.2f}")
     print(f"Standard Deviation: {np.std(accuracies):.2f}")
 
-  
+    return np.mean(accuracies), np.std(accuracies)
