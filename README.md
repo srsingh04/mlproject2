@@ -1,4 +1,4 @@
-# mlproject2
+# ML4Science Project @ LPBS Lab 
 
 Results with scaling
 5-fold Cross Validation with Random Seed 6
