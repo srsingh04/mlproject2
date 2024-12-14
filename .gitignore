@@ -12,6 +12,7 @@ ENV/
 Lifespan/
 Optogenetics/
 Skeletonization_code/__pycache__/
+Lifespan2/
 
 # Distribution / packaging
 .Python

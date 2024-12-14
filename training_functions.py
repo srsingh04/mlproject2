@@ -9,6 +9,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
 from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LinearRegression
 
 def split_by_worm_id(df, test_size=0.2):
   """Splits a DataFrame based on 'worm_id' into training and testing sets.
@@ -85,7 +86,7 @@ def group_kfold_validation(df, model_select="logistic", n_splits=5, random_state
         None (prints mean accuracy and classification report).
     """
     # Extract features (X), target (y), and groups (worm_id)
-    X = df.drop(columns=['worm_id', 'drugged', 'average_distance_per_frame', 'maximal_distance_traveled', 'average_acceleration'])  # Drop 'worm_id' and target
+    X = df.drop(columns=['id', 'worm_id', 'drugged', 'average_distance_per_frame', 'maximal_distance_traveled', 'average_acceleration'])  # Drop 'worm_id' and target #dropping id removes all prediction strength
     y = df['drugged']  # Target variable
     groups = df['worm_id']  # Group variable for GroupKFold
     
@@ -115,6 +116,8 @@ def group_kfold_validation(df, model_select="logistic", n_splits=5, random_state
            model = DecisionTreeClassifier(random_state=random_state)
         elif model_select == "svm":
            model = SVC(random_state=random_state, class_weight='balanced')
+        # elif model_select == "linear":
+        #    model = LinearRegression()
         elif model_select == "xgboost":
           model = XGBClassifier(random_state=random_state, use_label_encoder=False, eval_metric='mlogloss', n_estimators=100, learning_rate=0.05, gamma=0.001) #converges regardless of n_estimators, learning_rate and gamma
         else:
@@ -141,6 +144,14 @@ def group_kfold_validation(df, model_select="logistic", n_splits=5, random_state
 
         # Optionally print classification report for each fold
         print(classification_report(y_test, y_pred))
+
+        # Feature importance for tree-based models
+        if model_select in ["random_forest", "xgboost"]:
+            importances = model.feature_importances_
+            feature_importances = sorted(zip(X.columns, importances), key=lambda x: -x[1])
+            print("\nFeature Importances:")
+            for feature, importance in feature_importances:
+                print(f"{feature}: {importance:.4f}")
 
     # Report overall results
     print(f"Mean Accuracy: {np.mean(accuracies):.2f}")
