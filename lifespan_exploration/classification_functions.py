@@ -10,6 +10,11 @@ from sklearn.svm import SVC
 from xgboost import XGBClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neural_network import MLPClassifier
+from sklearn.ensemble import StackingClassifier
+
 
 def split_by_worm_id(df, test_size=0.2):
   """Splits a DataFrame based on 'worm_id' into training and testing sets.
@@ -109,7 +114,8 @@ def group_kfold_validation(df, model_select="logistic", n_splits=5, random_state
 
         # Initialize and train Random Forest Classifier
         if model_select == "logistic":
-          model = LogisticRegression(random_state=random_state, penalty='l2', max_iter=1000, multi_class='multinomial', solver='saga', class_weight={0:0.5,1:0.25,2:0.25}) #
+          # model = LogisticRegression(random_state=random_state, penalty='l2', max_iter=1000, multi_class='multinomial', solver='saga', class_weight={0:0.5,1:0.25,2:0.25}) #
+          model = LogisticRegression(random_state=random_state, penalty='l2', max_iter=500, solver='lbfgs') #
         elif model_select == "random_forest":
            model = RandomForestClassifier(random_state=random_state)
         elif model_select == "decision_tree":
@@ -158,3 +164,98 @@ def group_kfold_validation(df, model_select="logistic", n_splits=5, random_state
     print(f"Standard Deviation: {np.std(accuracies):.2f}")
 
     return np.mean(accuracies), np.std(accuracies)
+
+
+
+
+#code to run kfold validation for all models and return a dictionary of the results
+def group_kfold_validation_all_models(df, n_splits=5, random_state=42):
+    """
+    Perform GroupKFold cross-validation for multiple models on the dataset based on worm_id.
+
+    Args:
+        df: DataFrame containing the dataset.
+        n_splits: Number of folds for cross-validation.
+
+    Returns:
+        A dictionary with model names, mean accuracy, and standard deviation.
+    """
+    # Extract features (X), target (y), and groups (worm_id)
+    X = df.drop(columns=['id', 'worm_id', 'drugged', 'average_distance_per_frame', 'maximal_distance_traveled', 'average_acceleration'])  # Drop 'worm_id' and target
+    y = df['drugged']  # Target variable
+    groups = df['worm_id']  # Group variable for GroupKFold
+    estimators = [('rf', RandomForestClassifier()), ('svm', SVC(probability=True))] #for stacking
+
+
+    # Define models to evaluate
+    num_classes = len(pd.unique(y))
+    if num_classes == 2:
+      models_dict = {
+          "logistic": LogisticRegression(random_state=random_state, max_iter=500, solver='lbfgs'),
+          "random_forest": RandomForestClassifier(random_state=random_state),
+          "decision_tree": DecisionTreeClassifier(random_state=random_state),
+          "svm": SVC(random_state=random_state, class_weight='balanced'),
+          "xgboost": XGBClassifier(random_state=random_state, use_label_encoder=False, eval_metric='mlogloss'),
+          "knn": KNeighborsClassifier(n_neighbors=5),
+          "naive_bayes": GaussianNB(),
+          "mlp_classifier": MLPClassifier(hidden_layer_sizes=(100,), max_iter=1000, random_state=42),
+          "stacking_classifier": StackingClassifier(estimators=estimators, final_estimator=LogisticRegression())
+      }
+    elif num_classes == 3:
+      models_dict = {
+          "logistic": LogisticRegression(random_state=random_state, penalty='l2', max_iter=1000, multi_class='multinomial', solver='saga', class_weight={0:0.5,1:0.25,2:0.25}),
+          "random_forest": RandomForestClassifier(random_state=random_state),
+          "decision_tree": DecisionTreeClassifier(random_state=random_state),
+          "svm": SVC(random_state=random_state, class_weight='balanced'),
+          "xgboost": XGBClassifier(random_state=random_state, use_label_encoder=False, eval_metric='mlogloss', n_estimators=100, learning_rate=0.05, gamma=0.001),
+          "knn": KNeighborsClassifier(n_neighbors=5),
+          "naive_bayes": GaussianNB(),
+          "mlp_classifier": MLPClassifier(hidden_layer_sizes=(100,), max_iter=1000, random_state=42),
+          "stacking_classifier": StackingClassifier(estimators=estimators, final_estimator=LogisticRegression())
+      }
+    else:
+      model_dict = {}
+      print("Error: Unexpected number of unique values in y: ", num_classes)
+
+    # Initialize GroupKFold
+    gkf = GroupKFold(n_splits=n_splits)
+    results = []
+
+    for model_name, model in models_dict.items():
+        print(f"Evaluating model: {model_name}")
+        accuracies = []
+        for train_idx, test_idx in gkf.split(X, y, groups):
+            X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+            y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+
+            # Handle missing values
+            if np.isnan(X_train).any().any() or np.isnan(X_test).any().any():
+                imputer = SimpleImputer(strategy='median')
+                X_train = imputer.fit_transform(X_train)
+                X_test = imputer.transform(X_test)
+
+            # Standardize features if needed
+            if model_name in ["logistic", "svm"]:
+                scaler = StandardScaler()
+                X_train = scaler.fit_transform(X_train)
+                X_test = scaler.transform(X_test)
+
+            # Train the model
+            model.fit(X_train, y_train)
+
+            # Evaluate the model
+            y_pred = model.predict(X_test)
+            acc = accuracy_score(y_test, y_pred)
+            accuracies.append(acc)
+
+        # Store the results
+        results.append({
+            "model": model_name,
+            "mean_accuracy": np.mean(accuracies),
+            "std_deviation": np.std(accuracies)
+        })
+
+
+    return results
+
+
